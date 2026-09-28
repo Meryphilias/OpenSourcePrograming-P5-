@@ -1,24 +1,28 @@
 let gridCoordX = [];
 let gridCoordY = [];
-let monsterCount = 20;
+
+let monsterCount = 5;
 let monstersPosX = [];
 let monstersPosY = [];
 let drawMonstersPosX = [];
 let drawMonstersPosY = [];
+let monsterColors = [[46, 204, 113], [241, 196, 15], [231, 76, 60], [230, 126, 34]];//'Yellow', 'Green', 'Red', 'Orange'
+
 let targetPosX = [];
 let targetPosY = [];
-let r = 0;
+
 let playerPosXindex = 8;
 let playerPosYindex = 4;
 
-let effects = [];
+let effectAhlpa = 0;
+let ahlapFadeSpeed = 10;
+let speed = 1.5;
+let r = 0;
 
 let wave = 0;
 let theta = 0;
 let waveWidth = 10;
 
-let monsterColors = [[46, 204, 113], [241, 196, 15], [231, 76, 60], [230, 126, 34]];//'Yellow', 'Green', 'Red', 'Orange'
-let speed = 1.5;
 
 function setup() {
   createCanvas(1280, 720);
@@ -167,23 +171,6 @@ function drawMonsterOverlapCounts() {
   }
 }
 
-function getBlock(playerPosX, playerPosY) {
-  let blockCoords = [];
-
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      blockCoords.push({
-        x: playerPosX + dx,
-        y: playerPosY + dy
-      });
-    }
-  }
-
-  return blockCoords;
-}
-
-
-
 function drawMonstersTotal(){
   for (let i = 0; i < monsterCount; i++) {
     let monsterOwnColor;
@@ -204,19 +191,58 @@ function drawMonstersTotal(){
   }
 }
 
-function draw(){
+function playerMovement(){
+  
+  switch (key) {
+    case 'w':
+      playerPosYindex--;
+      break;
+      
+    case 's':
+      playerPosYindex++;
+      break;
+      
+    case 'a':
+      playerPosXindex--;
+      break;
+      
+    case 'd':
+      playerPosXindex++;
+      break;
+  }
+}
+
+function staticLogic(){
 
   background(150);
   drawGrid();
-  drawPlayer(gridCoordX[8], gridCoordY[4]);
 
+  let c = color(100, 100, 150, effectAhlpa);
+  fill(c);
+  rect(gridCoordX[playerPosXindex - 1], gridCoordY[playerPosYindex - 1],240, 240);
   theta += 0.1;
   wave = waveWidth * sin(theta);
 
+}
+
+function dynamicLogic(){
+  if(effectAhlpa > 0){
+    effectAhlpa -= ahlapFadeSpeed;
+  }
+  drawPlayer(gridCoordX[playerPosXindex], gridCoordY[playerPosYindex]);
   drawMonstersTotal();
-  
+
+}
+
+function draw(){
+
+  staticLogic();
+  dynamicLogic();
 }
 
 function mousePressed(){
-  
+  effectAhlpa = 255;
+}
+function keyPressed(){
+  playerMovement();
 }
