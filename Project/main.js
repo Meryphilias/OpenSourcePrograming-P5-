@@ -1,5 +1,6 @@
 let playerImage;
 let enemyImage;
+let bonusImage;
 let attackSFX;
 
 let pause = false;
@@ -13,6 +14,12 @@ let monstersPosX = [];
 let monstersPosY = [];
 let drawMonstersPosX = [];
 let drawMonstersPosY = [];
+
+let isBonus = false;
+const BONUS_CREAT_INTERVAL = 10;
+const BONUS_SCORE = 5;
+let bonusPosXindex = 0;
+let bonusPosYindex = 0;
 
 let targetPosX = [];
 let targetPosY = [];
@@ -28,6 +35,8 @@ let theta = 0;
 let waveWidth = 10;
 
 let time = 0;
+let bonusDeltaTime = 0;
+let deltaTime = 0;
 let speed = 0;
 
 const MIN_DISTANCE = 3;
@@ -45,6 +54,7 @@ let timeLimitLevel = [90, 80, 60, 40, 20];
 const UI_POS_X = 10;
 const UI_POS_Y = 10;
 
+const STAGE_START_TIME = 3;
 
 async function setup() {
   createCanvas(1280, 720);
@@ -53,6 +63,7 @@ async function setup() {
   initGameData();
   playerImage = await loadImage('data/circle1.png');
   enemyImage = await loadImage('data/square.png');
+  bonusImage = await loadImage('data/circle2.png');
   attackSFX = await loadSound('data/burst.mp3');
 
 }
@@ -104,7 +115,6 @@ function isMonsterTargetDuplicate(index){
 }
 
 
-
 function initGameData() { 
   for (let col = 0; col < 16; col++) { 
       gridCoordX[col] = col * 80; 
@@ -130,7 +140,7 @@ function initGameData() {
     targetPosX[i] = monstersPosX[i]; 
     targetPosY[i] = monstersPosY[i]; 
    
-    if(monstersPosX[i] - playerPosXindex != 0 && monstersPosY[i] - playerPosYindex != 0) 
+    if(monstersPosX[i] - playerPosXindex != 0 && monstersPosY[i] - playerPosYindex != 0) {
       if(abs(monstersPosX[i] - playerPosXindex) >= abs(monstersPosY[i] - playerPosYindex)){ 
         monstersPosX[i] - playerPosXindex > 0 ? targetPosX[i]-- : targetPosX[i]++; 
       } 
@@ -138,6 +148,7 @@ function initGameData() {
         monstersPosY[i] - playerPosYindex > 0 ? targetPosY[i]-- : targetPosY[i]++; 
       } 
     } 
+  }
 } 
 
 function updateTargetPos(i){ 
@@ -258,7 +269,6 @@ function applyStageData(){
 
 function checkStageClear(){
   if(getMonsterCount() > 0) return;
-
   stage++;
   textAhlpa = 255;
   centerText = 'Stage ' + stage;
@@ -274,6 +284,8 @@ function checkStageClear(){
   targetPosY = [];
 
   initGameData();
+  centerTextLine();
+  deltaTime = 0;
 }
 
 function isPlayerHit(){
@@ -329,6 +341,38 @@ function drawUI(){
 
 }
 
+function isStageStating(){
+  if(stage == 1) return false;
+  if(deltaTime < STAGE_START_TIME * 60){
+    return true;
+  }
+  return false;
+}
+
+function creatBonus(){
+  if(isBonus == true || bonusDeltaTime < 60 * BONUS_CREAT_INTERVAL)return;
+
+  isBonus = true;
+  bonusDeltaTime = 0;
+  bonusPosXindex = floor(random(16));
+  bonusPosYindex = floor(random(9));
+
+}
+
+function drawBonus(){
+  if(!isBonus)return;
+
+  image(bonusImage, gridCoordX[bonusPosXindex] + 20, gridCoordY[bonusPosYindex] + 20, 40, 40);
+}
+
+function getBonus(){
+  if(isBonus == true && bonusPosXindex == playerPosXindex && bonusPosYindex == playerPosYindex){
+    isBonus = false;
+    bonusDeltaTime = 0;
+    score += BONUS_SCORE;
+  }
+}
+
 function staticLogic(){ 
  
   background(150); 
@@ -336,9 +380,11 @@ function staticLogic(){
   drawGrid(); 
   drawUI();
   centerTextLine();
+  creatBonus();
 
   theta += 0.1; 
   time -= 1/60;
+  bonusDeltaTime += 1;
 
   let c = color(100, 100, 150, effectAhlpa); 
   fill(c); 
@@ -351,26 +397,26 @@ function staticLogic(){
   if(textAhlpa > 0){ 
     textAhlpa -= TEXT_FADE_SPEED; 
   } 
- 
 } 
  
 function dynamicLogic(){ 
-
   drawPlayer(gridCoordX[playerPosXindex], gridCoordY[playerPosYindex]); 
   if(effectAhlpa >= 150){
     playerAttack(240/2, 240/2);
   }
   drawMonstersTotal(); 
-
+  drawBonus();
+  getBonus();
   checkStageClear();
- 
 } 
 
 function draw(){
-  if(pause == true)return;
+  deltaTime += 1;
+  if(!pause && !isStageStating()){ 
 
-  staticLogic();
-  dynamicLogic();
+    staticLogic();
+    dynamicLogic();
+  };
 }
  
 function mousePressed(){ 
