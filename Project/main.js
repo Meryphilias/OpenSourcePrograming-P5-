@@ -1,12 +1,8 @@
 const CONFIG = {
   canvas: { width: 1280, height: 720 },
   grid: { cols: 16, rows: 9, cellSize: 80 },
-  fps: 60,
-  player: {
-    start: { x: 8, y: 4 },
-    attackSize: 240,      
-    minSpawnDistance: 3,    
-  },
+  attackSize: 1,   
+  minSpawnDistance: 3,    
   effect: { fadeSpeed: 10, hitThreshold: 150 },
   wave: { width: 10, speed: 0.1 },
   bonus: { interval: 10, score: 5 },  
@@ -23,12 +19,6 @@ const STAGES = [
   { enemyCount: 20, speed: 8,   timeLimit: 20 },
 ];
 
-const MOVE_KEYS = {
-  w: { x: 0,  y: -1 },
-  s: { x: 0,  y: 1 },
-  a: { x: -1, y: 0 },
-  d: { x: 1,  y: 0 },
-};
 
 const DIRECTIONS = [
   { x: 1,  y: 0 },
@@ -37,7 +27,7 @@ const DIRECTIONS = [
   { x: 0,  y: -1 },
 ];
 
-const ASSET_PATHS = {
+let ASSET_PATHS = {
   player: 'data/circle1.png',
   enemy: 'data/square.png',
   bonus: 'data/circle2.png',
@@ -54,14 +44,14 @@ const Cell = {
 };
 
 class Grid {
-  constructor({ cols, rows, cellSize }) {
-    this.cols = cols;
-    this.rows = rows;
-    this.cellSize = cellSize;
+  constructor() {
+    this.cols = CONFIG.grid.cols;
+    this.rows = CONFIG.grid.rows;
+    this.cellSize = CONFIG.grid.cellSize;
   }
-
   toPixel(cell) {
-    return { x: cell.x * this.cellSize, y: cell.y * this.cellSize };
+    return { x: cell.x * this.cellSize, 
+             y: cell.y * this.cellSize };
   }
 
   contains(cell) {
@@ -69,208 +59,125 @@ class Grid {
   }
 
   randomCell() {
-    return { x: floor(random(this.cols)), y: floor(random(this.rows)) };
+    return { x: floor(random(this.cols)), 
+             y: floor(random(this.rows)) };
   }
+
+  isSame(a, b) { return a.x === b.x && a.y === b.y; }
 
   draw() {
     stroke(180);
     strokeWeight(1);
 
-    for (let x = 0; x <= width; x += this.cellSize) {
-      line(x, 0, x, height);
-    }
-    for (let y = 0; y <= height; y += this.cellSize) {
-      line(0, y, width, y);
-    }
+    for (let x = 0; x <= width; x += this.cellSize) line(x, 0, x, height);
+    for (let y = 0; y <= height; y += this.cellSize) line(0, y, width, y);
   }
 }
 
 class Player {
-  constructor(grid, image) {
-    this.grid = grid;
-    this.image = image;
-    this.cell = { ...CONFIG.player.start };
+  constructor(gridObject) {
+    this.gridObject = gridObject;
+    this.image = ASSET_PATHS.player;
+    this.cell = {x : 8, y : 4};
     this.effectAlpha = 0;
   }
 
-  get pixel() {
-    return this.grid.toPixel(this.cell);
-  }
-
-  get isAttacking() {
-    return this.effectAlpha >= CONFIG.effect.hitThreshold;
-  }
-
-  move(inputKey) {
-    const dir = MOVE_KEYS[inputKey];
-    if (!dir) return;
-    this.cell.x += dir.x;
-    this.cell.y += dir.y;
-  }
-
-  triggerAttack() {
-    this.effectAlpha = 255;
-  }
-
-  updateEffect() {
-    if (this.effectAlpha > 0) {
-      this.effectAlpha -= CONFIG.effect.fadeSpeed;
-    }
-  }
-
   drawEffect() {
-    const size = CONFIG.player.attackSize;
-    const { x, y } = this.pixel;
+    const cellSize = CONFIG.grid.cellSize;
+    const size = ((CONFIG.attackSize * 2) + 1) * cellSize;
+    const { x, y } = this.gridObject.toPixel(this.cell);
     noStroke();
     fill(100, 100, 150, this.effectAlpha);
-    rect(x - this.grid.cellSize, y - this.grid.cellSize, size, size);
+    rect(x - cellSize, y - cellSize, size, size);
   }
 
   draw() {
-    const { x, y } = this.pixel;
-    image(this.image, x, y, this.grid.cellSize, this.grid.cellSize);
+    const { x, y } = this.gridObject.toPixel(this.cell);
+    image(this.image, x, y, this.gridObject.cellSize, this.gridObject.cellSize);
+
+    if (this.effectAlpha > 0) {
+      this.effectAlpha -= CONFIG.effect.fadeSpeed;
+    }
+    this.drawEffect();
   }
 }
 
 class Monster {
-  constructor(grid, image, cell) {
-    this.grid = grid;
-    this.image = image;
+  constructor(gridObject, monsters) {
+    this.gridObject = gridObject;
+    this.image = ASSET_PATHS.enemy;
     this.alive = true;
+    this.monsters = monsters;
 
-    this.cell = { ...cell };          
-    this.target = { ...cell };          
-    this.drawPos = grid.toPixel(cell);  
+    this.cell = {x : 0, y : 0};
+    this.target = {x : 0, y : 0};
+    this.drawPos = gridObject.toPixel(this.cell);  
+    this.spawn();
   }
 
-  chooseNextTarget(manager) {
-    this.cell = { ...this.target };
+  spawn() {
 
-    const dir = DIRECTIONS[floor(random(DIRECTIONS.length))];
-    this.target = { x: this.cell.x + dir.x, y: this.cell.y + dir.y };
-
-    if (manager.isTargetTaken(this) || !this.grid.contains(this.target)) {
-      this.target = { ...this.cell };
+    this.cell = this.gridObject.randomCell();
+    this.drawPos = this.gridObject.toPixel(this.cell);
+    for(const m of this.monsters){
+      while (Cell.distance({x: 8, y : 4}, this.cell) < CONFIG.minSpawnDistance || Cell.isSame(m.cell, this.cell)) {
+        this.cell = this.gridObject.randomCell();
+        this.drawPos = this.gridObject.toPixel(this.cell);
+      }
     }
+    this.target.x = this.cell.x;
+    this.target.y = this.cell.y;
   }
 
-  update(speed, manager) {
-    const goal = this.grid.toPixel(this.target);
-    const dx = goal.x - this.drawPos.x;
-    const dy = goal.y - this.drawPos.y;
-    const dist = sqrt(dx * dx + dy * dy);
+  chooseNextTarget() {
+    
+    const dir = random(DIRECTIONS);
+    const next = { x: this.cell.x + dir.x, y: this.cell.y + dir.y };
 
-    if (dist > 2) {
-      this.drawPos.x += (dx / dist) * speed;
-      this.drawPos.y += (dy / dist) * speed;
+    if(!this.gridObject.contains(next))return;
+    for(const m of this.monsters){
+      if(m !== this && Cell.isSame(m.target, next))return;
+    }
+    this.target = next;
+  }
+
+  draw(wave, speed) {
+    if(this.alive == false) return;
+    let distance = abs(this.drawPos.x - this.gridObject.toPixel(this.target).x) + abs(this.drawPos.y - this.gridObject.toPixel(this.target).y)
+    if (distance > 10) {
+      this.drawPos.x += (this.gridObject.toPixel(this.target).x - this.drawPos.x) * speed / 60;
+      this.drawPos.y += (this.gridObject.toPixel(this.target).y - this.drawPos.y) * speed / 60;
     } else {
-      this.drawPos = goal;
-      this.chooseNextTarget(manager);
+      this.cell.x = this.target.x;
+      this.cell.y = this.target.y;
+      this.chooseNextTarget();
     }
-  }
 
-  draw(wave) {
     image(this.image, 20 + this.drawPos.x + wave, 20 + this.drawPos.y, 40, 40);
-  }
-
-  isInRange(center, rangeX, rangeY) {
-    return abs(this.drawPos.x - center.x) < rangeX &&
-           abs(this.drawPos.y - center.y) < rangeY;
-  }
-}
-
-class MonsterManager {
-  constructor(grid, image) {
-    this.grid = grid;
-    this.image = image;
-    this.monsters = [];
-  }
-
-  clear() {
-    this.monsters = [];
-  }
-
-  spawn(count, playerCell) {
-    this.clear();
-
-    for (let i = 0; i < count; i++) {
-      let cell = this.grid.randomCell();
-      while (this.isTooCloseToPlayer(cell, playerCell) || this.isOccupied(cell)) {
-        cell = this.grid.randomCell();
-      }
-
-      const monster = new Monster(this.grid, this.image, cell);
-      this.monsters.push(monster);
-    }
-  }
-
-  get alive() {
-    return this.monsters.filter((m) => m.alive);
-  }
-
-  get aliveCount() {
-    return this.alive.length;
-  }
-
-  isTooCloseToPlayer(cell, playerCell) {
-    return Cell.distance(cell, playerCell) < CONFIG.player.minSpawnDistance;
-  }
-
-  isOccupied(cell) {
-    return this.monsters.some((m) => Cell.isSame(m.cell, cell));
-  }
-
-  isTargetTaken(self) {
-    return this.alive.some((m) => m !== self && Cell.isSame(m.target, self.target));
-  }
-
-  isPlayerHit(playerCell) {
-    return this.alive.some((m) => Cell.isSame(m.cell, playerCell));
-  }
-
-  killInRange(center, rangeX, rangeY) {
-    let kills = 0;
-    for (const m of this.alive) {
-      if (m.isInRange(center, rangeX, rangeY)) {
-        m.alive = false;
-        kills++;
-      }
-    }
-    return kills;
-  }
-
-  updateAndDraw(speed, wave) {
-    for (const m of this.alive) {
-      m.update(speed, this);
-      m.draw(wave);
-    }
   }
 }
 
 
 class Bonus {
-  constructor(grid, image) {
-    this.grid = grid;
-    this.image = image;
+  constructor(gridObject) {
+    this.gridObject = gridObject;
+    this.image = ASSET_PATHS.bonus;
     this.active = false;
     this.cell = { x: 0, y: 0 };
     this.timer = 0; 
   }
 
   trySpawn() {
-    if (this.active || this.timer < CONFIG.fps * CONFIG.bonus.interval) return;
+    if (this.active || this.timer < 60 * CONFIG.bonus.interval) return;
     this.active = true;
     this.timer = 0;
-    this.cell = this.grid.randomCell();
-  }
-
-  tick() {
-    this.timer += 1;
+    this.cell = this.gridObject.randomCell();
   }
 
   draw() {
+    this.timer++;
     if (!this.active) return;
-    const { x, y } = this.grid.toPixel(this.cell);
+    const { x, y } = this.gridObject.toPixel(this.cell);
     image(this.image, x + 20, y + 20, 40, 40);
   }
 
@@ -284,7 +191,12 @@ class Bonus {
 
 
 class Hud {
-  draw(game) {
+  constructor(){
+    this.stage = 1;
+    this.centerText = '';
+    this.textAlpha = 0;
+  }
+  draw(time, score) {
     const { x, y, width: w, height: h } = CONFIG.ui;
 
     noStroke();
@@ -293,16 +205,19 @@ class Hud {
 
     fill(255);
     textSize(20);
-    text('Stage : ' + game.stage, x + 15, y + 28);
-    text('Score : ' + game.score, x + 15, y + 58);
-    text('Enemies : ' + game.monsters.aliveCount, x + 15, y + 88);
+    text('Stage : ' + this.stage, x + 15, y + 28);
+    text('Score : ' + score, x + 15, y + 58);
 
-    this.drawTimerBar(game, x + 15, y + 102);
+    this.drawTimerBar(time, x + 15, y + 102);
+    this.drawCenterText();
+    if (this.textAlpha > 0) {
+      this.textAlpha -= CONFIG.text.fadeSpeed;
+    }
   }
 
-  drawTimerBar(game, x, y) {
+  drawTimerBar(time, x, y) {
     const { barWidth, barHeight } = CONFIG.ui;
-    const ratio = game.time / game.stageData.timeLimit;
+    const ratio = time / STAGES[this.stage - 1].timeLimit;
 
     noStroke();
     fill(100);
@@ -313,146 +228,188 @@ class Hud {
 
     fill(255);
     textSize(16);
-    text('Time : ' + nf(game.time, 2, 1) + 's', x + 8, y + 15);
+    text('Time : ' + nf(time, 2, 1) + 's', x + 8, y + 15);
   }
 
-  drawCenterText(message, alpha) {
-    fill(255, 255, 255, alpha);
+  drawCenterText() {
+    fill(255, 255, 255, this.textAlpha);
     textSize(60);
-    text(message, width / 2, height / 2);
+    text(this.centerText, width / 2 - 100, height / 2);
   }
 }
 
-class Game {
-  constructor(assets) {
-    this.grid = new Grid(CONFIG.grid);
-    this.player = new Player(this.grid, assets.player);
-    this.monsters = new MonsterManager(this.grid, assets.enemy);
-    this.bonus = new Bonus(this.grid, assets.bonus);
-    this.hud = new Hud();
-    this.attackSFX = assets.attackSFX;
-
-    this.stage = 1;
-    this.score = 0;
-    this.time = 0;
-    this.speed = 0;
-
-    this.paused = false;
-    this.frames = 0;        
-    this.theta = 0;
-    this.wave = 0;
-
-    this.centerText = '';
-    this.textAlpha = 0;
-
-    this.startStage();
+class State {
+  constructor(game){
+    this.g = game;
   }
+  update(){}
+  render(){}
+  onKeyPressed(){}
+  onMousePressed(){}
+}
 
-  get stageData() {
-    return STAGES[min(this.stage, STAGES.length) - 1];
-  }
+class PlayingState extends State {
+  update() {
 
-  get isCleared() {
-    return this.stage > STAGES.length;
-  }
-
-  startStage() {
-    if (this.isCleared) return;
-    const { enemyCount, speed, timeLimit } = this.stageData;
-    this.speed = speed;
-    this.time = timeLimit;
-    this.monsters.spawn(enemyCount, this.player.cell);
-  }
-
-  isStageStarting() {
-    return this.stage !== 1 && this.frames < CONFIG.stageStartTime * CONFIG.fps;
-  }
-
-  checkStageClear() {
-    if (this.monsters.aliveCount > 0) return;
-
-    this.stage++;
-    this.showCenterText('Stage ' + this.stage);
-    this.startStage();
-    this.hud.drawCenterText(this.centerText, this.textAlpha);
-    this.frames = 0;
-  }
-
-  checkGameState() {
-    if (this.monsters.isPlayerHit(this.player.cell) || this.time < 0) {
-      background(30);
-      this.showCenterText('Game Over\nScore : ' + this.score);
-      this.paused = true;
-    }
-    if (this.isCleared) {
-      background(80);
-      this.showCenterText('Game Clear\nScore : ' + this.score);
-      this.paused = true;
-    }
-  }
-
-  showCenterText(message) {
-    this.centerText = message;
-    this.textAlpha = 255;
-  }
-
-  drawStatic() {
-    background(150);
-    this.checkGameState();
-    this.grid.draw();
-    this.hud.draw(this);
-    this.hud.drawCenterText(this.centerText, this.textAlpha);
-    this.bonus.trySpawn();
-
-    this.theta += CONFIG.wave.speed;
-    this.time -= 1 / CONFIG.fps;
-    this.bonus.tick();
-
-    this.player.drawEffect();
-    this.wave = CONFIG.wave.width * sin(this.theta);
-
-    this.player.updateEffect();
-    if (this.textAlpha > 0) {
-      this.textAlpha -= CONFIG.text.fadeSpeed;
-    }
-  }
-
-  drawDynamic() {
-    this.player.draw();
-
-    if (this.player.isAttacking) {
-      this.attack();
+    for(const m of this.g.monsters){
+      if(Cell.isSame(this.g.player.cell, m.cell) || this.g.time < 0){
+        this.g.end(0);
+        return;
+      }
     }
 
-    this.monsters.updateAndDraw(this.speed, this.wave);
-    this.bonus.draw();
-    this.score += this.bonus.tryCollect(this.player.cell);
+    this.g.time -= 1 / 60;
+    this.g.theta += CONFIG.wave.speed;
+    this.g.hud.draw(this.g.time, this.g.score);
+    this.g.bonus.trySpawn();
+    this.g.bonus.draw();
+    this.g.score += this.g.bonus.tryCollect(this.g.player.cell);
+    this.g.player.draw();
+
+    for(const m of this.g.monsters){
+        if(m.alive == true){ m.draw(this.g.wave, STAGES[this.g.stage - 1].speed ) }
+    }
+
     this.checkStageClear();
   }
 
-  attack() {
-    const half = CONFIG.player.attackSize / 2;
-    this.score += this.monsters.killInRange(this.player.pixel, half, half);
+  checkStageClear() {
+    for(const m of this.g.monsters){
+      if(m.alive == true) return;
+    }
+    this.g.nextStage();
   }
 
-  update() {
-    this.frames += 1;
-    if (this.paused || this.isStageStarting()) return;
-
-    this.drawStatic();
-    this.drawDynamic();
+  onKeyPressed(inputKey) {
+    switch (inputKey) {
+      case "w":
+        this.g.player.cell.x += DIRECTIONS[3].x;
+        this.g.player.cell.y += DIRECTIONS[3].y;
+        break;
+      case "a":
+        this.g.player.cell.x += DIRECTIONS[1].x;
+        this.g.player.cell.y += DIRECTIONS[1].y;
+        break;
+      case "s":
+        this.g.player.cell.x += DIRECTIONS[2].x;
+        this.g.player.cell.y += DIRECTIONS[2].y;
+        break;
+      case "d":
+        this.g.player.cell.x += DIRECTIONS[0].x;
+        this.g.player.cell.y += DIRECTIONS[0].y;
+        break;
+    }
   }
 
   onMousePressed() {
-    this.player.triggerAttack();
+    for(const m of this.g.monsters){
+        if(abs(m.cell.x - this.g.player.cell.x) <= CONFIG.attackSize && abs(m.cell.y - this.g.player.cell.y) <= CONFIG.attackSize){
+          this.g.score++;
+          m.alive = false;
+          m.cell = {x: -42, y: -42};
+        }
+    }
+    this.g.player.effectAlpha = 255;
+    this.attackSFX = ASSET_PATHS.attackSFX;
     if (this.attackSFX.isPlaying()) {
       this.attackSFX.stop();
     }
     this.attackSFX.play();
   }
+}
 
-  onKeyPressed(inputKey) {
-    this.player.move(inputKey);
+class StageIntroState extends State {
+
+  update() {
+
+    background(50);
+    this.g.hud.centerText = 'Next Stage···';
+    this.g.hud.draw(this.g.time, this.g.score);
+
+    if (this.g.frames >= CONFIG.stageStartTime * 60) {
+      this.g.hud.centerText = 'Stage ' + this.g.stage;
+      this.g.state = new PlayingState(this.g);
+    }
+    this.g.hud.textAlpha = 255;
+  }
+}
+
+class EndState extends State {
+
+  update(){
+    if (this.g.endState == 0) {
+      background(30);
+      this.g.hud.centerText = 'Game Over\nScore : ' + this.g.score;
+    }
+    else if (this.g.endState == 1) {
+      background(80);
+      this.g.hud.centerText = 'Game Clear\nScore : ' + this.g.score;
+    }
+    this.g.hud.textAlpha = 255;
+    this.g.hud.draw(this.g.time, this.g.score);
+  }
+}
+
+class Game {
+  constructor() {
+    this.grid = new Grid();
+    this.player = new Player(this.grid);
+    this.bonus = new Bonus(this.grid);
+    this.hud = new Hud();
+    this.attackSFX = ASSET_PATHS.attackSFX;
+    
+    this.stage = 1;
+    this.score = 0;
+    this.time = 0;
+    this.speed = 0;
+    this.monsters = [];
+
+    this.endState = -1;
+    this.frames = 0;        
+    this.theta = 0;
+    this.wave = 0;
+
+    this.state = new PlayingState(this);
+
+    this.startStage();
+  }
+
+  startStage() {
+    this.frames = 0;
+    this.hud.stage = this.stage;
+    this.player.cell = {x : 8, y : 4};
+    if (this.stage > STAGES.length) return;
+    this.time = STAGES[this.stage - 1].timeLimit;
+    this.monsters = [];
+    for(let i = 0; i < STAGES[this.stage - 1].enemyCount; i++){
+      this.monsters.push(new Monster(this.grid, this.monsters));
+    }
+  }
+
+  nextStage() {
+    this.stage++;
+    if(this.stage > STAGES.length){
+      this.end(1);
+      return;
+    }
+    this.startStage();
+    this.state = new StageIntroState(this);
+  }
+
+  end(num) {
+    this.endState = num;
+    this.state = new EndState(this);
+    
+  }
+
+  draw(){
+    background(150);
+    this.grid.draw();
+
+    this.frames += 1;
+    this.wave = CONFIG.wave.width * sin(this.theta);
+    this.state.update();
+
   }
 }
 
@@ -469,21 +426,18 @@ async function setup() {
     bonus: await loadImage(ASSET_PATHS.bonus),
     attackSFX: await loadSound(ASSET_PATHS.attackSFX),
   };
-
-  game = new Game(assets);
+  ASSET_PATHS = assets;
+  game = new Game();
 }
 
 function draw() {
   if (!game) return;
-  game.update();
+  game.draw();
 }
-
 function mousePressed() {
-  if (!game) return;
-  game.onMousePressed();
+  game.state.onMousePressed();
 }
 
 function keyPressed() {
-  if (!game) return;
-  game.onKeyPressed(key);
+  game.state.onKeyPressed(key);
 }
