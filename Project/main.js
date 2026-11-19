@@ -1,13 +1,14 @@
 const CONFIG = {
   canvas: { width: 1280, height: 720 },
   grid: { cols: 16, rows: 9, cellSize: 80 },
-  attackSize: 1,   
-  minSpawnDistance: 3,    
+  attackSize: 1,
+  minSpawnDistance: 3,
   effect: { fadeSpeed: 10, hitThreshold: 150 },
   wave: { width: 10, speed: 0.1 },
-  bonus: { interval: 10, score: 5 },  
+  bonus: { interval: 10, score: 5 },
+  portal: { basesize : 100},
   text: { fadeSpeed: 3 },
-  stageStartTime: 3,                    
+  stageStartTime: 3,
   ui: { x: 10, y: 10, width: 200, height: 135, barWidth: 170, barHeight: 20 },
 };
 
@@ -19,7 +20,6 @@ const STAGES = [
   { enemyCount: 20, speed: 8,   timeLimit: 20 },
 ];
 
-
 const DIRECTIONS = [
   { x: 1,  y: 0 },
   { x: -1, y: 0 },
@@ -27,10 +27,17 @@ const DIRECTIONS = [
   { x: 0,  y: -1 },
 ];
 
+const MODE = {
+  INTRO: 'intro',
+  PLAYING: 'playing',
+  END: 'end',
+};
+
 let ASSET_PATHS = {
   player: 'data/circle1.png',
   enemy: 'data/square.png',
   bonus: 'data/circle2.png',
+  portal: 'data/burst.png',
   attackSFX: 'data/burst.mp3',
 };
 
@@ -38,7 +45,7 @@ const Cell = {
   isSame(a, b) {
     return a.x === b.x && a.y === b.y;
   },
-  distance(a, b) { 
+  distance(a, b) {
     return abs(a.x - b.x) + abs(a.y - b.y);
   },
 };
@@ -50,7 +57,7 @@ class Grid {
     this.cellSize = CONFIG.grid.cellSize;
   }
   toPixel(cell) {
-    return { x: cell.x * this.cellSize, 
+    return { x: cell.x * this.cellSize,
              y: cell.y * this.cellSize };
   }
 
@@ -59,7 +66,7 @@ class Grid {
   }
 
   randomCell() {
-    return { x: floor(random(this.cols)), 
+    return { x: floor(random(this.cols)),
              y: floor(random(this.rows)) };
   }
 
@@ -111,7 +118,7 @@ class Monster {
 
     this.cell = {x : 0, y : 0};
     this.target = {x : 0, y : 0};
-    this.drawPos = gridObject.toPixel(this.cell);  
+    this.drawPos = gridObject.toPixel(this.cell);
     this.spawn();
   }
 
@@ -130,7 +137,7 @@ class Monster {
   }
 
   chooseNextTarget() {
-    
+
     const dir = random(DIRECTIONS);
     const next = { x: this.cell.x + dir.x, y: this.cell.y + dir.y };
 
@@ -164,7 +171,7 @@ class Bonus {
     this.image = ASSET_PATHS.bonus;
     this.active = false;
     this.cell = { x: 0, y: 0 };
-    this.timer = 0; 
+    this.timer = 0;
   }
 
   trySpawn() {
@@ -186,6 +193,26 @@ class Bonus {
     this.active = false;
     this.timer = 0;
     return CONFIG.bonus.score;
+  }
+}
+
+
+class Portal {
+  constructor(gridObject) {
+    this.gridObject = gridObject;
+    this.image = ASSET_PATHS.portal;
+    this.active = false;
+    this.cell = { x: 8, y: 4 };
+  }
+
+  draw(theta) {
+    if (!this.active) return;
+    const { x, y } = this.gridObject.toPixel(this.cell);
+
+    const DynamicSize = sin(theta) * 10;
+    const portalsize = CONFIG.portal.basesize + DynamicSize;
+
+    image(this.image, x - 10 - (DynamicSize/2), y - 10 - (DynamicSize/2), portalsize, portalsize);
   }
 }
 
@@ -238,138 +265,27 @@ class Hud {
   }
 }
 
-class State {
-  constructor(game){
-    this.g = game;
-  }
-  update(){}
-  render(){}
-  onKeyPressed(){}
-  onMousePressed(){}
-}
-
-class PlayingState extends State {
-  update() {
-
-    for(const m of this.g.monsters){
-      if(Cell.isSame(this.g.player.cell, m.cell) || this.g.time < 0){
-        this.g.end(0);
-        return;
-      }
-    }
-
-    this.g.time -= 1 / 60;
-    this.g.theta += CONFIG.wave.speed;
-    this.g.hud.draw(this.g.time, this.g.score);
-    this.g.bonus.trySpawn();
-    this.g.bonus.draw();
-    this.g.score += this.g.bonus.tryCollect(this.g.player.cell);
-    this.g.player.draw();
-
-    for(const m of this.g.monsters){
-        if(m.alive == true){ m.draw(this.g.wave, STAGES[this.g.stage - 1].speed ) }
-    }
-
-    this.checkStageClear();
-  }
-
-  checkStageClear() {
-    for(const m of this.g.monsters){
-      if(m.alive == true) return;
-    }
-    this.g.nextStage();
-  }
-
-  onKeyPressed(inputKey) {
-    switch (inputKey) {
-      case "w":
-        this.g.player.cell.x += DIRECTIONS[3].x;
-        this.g.player.cell.y += DIRECTIONS[3].y;
-        break;
-      case "a":
-        this.g.player.cell.x += DIRECTIONS[1].x;
-        this.g.player.cell.y += DIRECTIONS[1].y;
-        break;
-      case "s":
-        this.g.player.cell.x += DIRECTIONS[2].x;
-        this.g.player.cell.y += DIRECTIONS[2].y;
-        break;
-      case "d":
-        this.g.player.cell.x += DIRECTIONS[0].x;
-        this.g.player.cell.y += DIRECTIONS[0].y;
-        break;
-    }
-  }
-
-  onMousePressed() {
-    for(const m of this.g.monsters){
-        if(abs(m.cell.x - this.g.player.cell.x) <= CONFIG.attackSize && abs(m.cell.y - this.g.player.cell.y) <= CONFIG.attackSize){
-          this.g.score++;
-          m.alive = false;
-          m.cell = {x: -42, y: -42};
-        }
-    }
-    this.g.player.effectAlpha = 255;
-    this.attackSFX = ASSET_PATHS.attackSFX;
-    if (this.attackSFX.isPlaying()) {
-      this.attackSFX.stop();
-    }
-    this.attackSFX.play();
-  }
-}
-
-class StageIntroState extends State {
-
-  update() {
-
-    background(50);
-    this.g.hud.centerText = 'Next Stage···';
-    this.g.hud.draw(this.g.time, this.g.score);
-
-    if (this.g.frames >= CONFIG.stageStartTime * 60) {
-      this.g.hud.centerText = 'Stage ' + this.g.stage;
-      this.g.state = new PlayingState(this.g);
-    }
-    this.g.hud.textAlpha = 255;
-  }
-}
-
-class EndState extends State {
-
-  update(){
-    if (this.g.endState == 0) {
-      background(30);
-      this.g.hud.centerText = 'Game Over\nScore : ' + this.g.score;
-    }
-    else if (this.g.endState == 1) {
-      background(80);
-      this.g.hud.centerText = 'Game Clear\nScore : ' + this.g.score;
-    }
-    this.g.hud.textAlpha = 255;
-    this.g.hud.draw(this.g.time, this.g.score);
-  }
-}
 
 class Game {
   constructor() {
     this.grid = new Grid();
     this.player = new Player(this.grid);
     this.bonus = new Bonus(this.grid);
+    this.portal = new Portal(this.grid);
     this.hud = new Hud();
     this.attackSFX = ASSET_PATHS.attackSFX;
-    
+
     this.stage = 1;
     this.score = 0;
     this.time = 0;
     this.speed = 0;
     this.monsters = [];
 
+    this.mode = MODE.PLAYING;
     this.endState = -1;
-    this.frames = 0;        
+    this.frames = 0;
     this.theta = 0;
     this.wave = 0;
-
-    this.state = new PlayingState(this);
 
     this.startStage();
   }
@@ -378,6 +294,7 @@ class Game {
     this.frames = 0;
     this.hud.stage = this.stage;
     this.player.cell = {x : 8, y : 4};
+    this.portal.active = false;
     if (this.stage > STAGES.length) return;
     this.time = STAGES[this.stage - 1].timeLimit;
     this.monsters = [];
@@ -393,13 +310,12 @@ class Game {
       return;
     }
     this.startStage();
-    this.state = new StageIntroState(this);
+    this.mode = MODE.INTRO;
   }
 
   end(num) {
     this.endState = num;
-    this.state = new EndState(this);
-    
+    this.mode = MODE.END;
   }
 
   draw(){
@@ -408,8 +324,135 @@ class Game {
 
     this.frames += 1;
     this.wave = CONFIG.wave.width * sin(this.theta);
-    this.state.update();
 
+    switch (this.mode) {
+      case MODE.INTRO: 
+        this.updateIntro();   
+        break;
+      case MODE.PLAYING: 
+        this.updatePlaying(); 
+        break;
+      case MODE.END:    
+        this.updateEnd();     
+        break;
+    }
+  }
+
+  updatePlaying() {
+    if (this.isPlayerHit() || this.time < 0) {
+      this.end(0);
+      return;
+    }
+
+    this.time -= 1 / 60;
+    this.theta += CONFIG.wave.speed;
+    this.hud.draw(this.time, this.score);
+    this.bonus.trySpawn();
+    this.bonus.draw();
+    this.score += this.bonus.tryCollect(this.player.cell);
+    this.portal.draw(this.theta);
+    this.player.draw();
+
+    for(const m of this.monsters){
+      if(m.alive == true){ m.draw(this.wave, STAGES[this.stage - 1].speed) }
+    }
+
+    this.checkStageClear();
+  }
+
+  updateIntro() {
+    background(50);
+    this.hud.centerText = 'Next Stage···';
+    this.hud.draw(this.time, this.score);
+
+    if (this.frames >= CONFIG.stageStartTime * 60) {
+      this.hud.centerText = 'Stage ' + this.stage;
+      this.mode = MODE.PLAYING;
+    }
+    this.hud.textAlpha = 255;
+  }
+
+  updateEnd() {
+    if (this.endState == 0) {
+      background(30);
+      this.hud.centerText = 'Game Over\nScore : ' + this.score;
+    }
+    else if (this.endState == 1) {
+      background(80);
+      this.hud.centerText = 'Game Clear\nScore : ' + this.score;
+    }
+    this.hud.textAlpha = 255;
+    this.hud.draw(this.time, this.score);
+  }
+
+
+  isPlayerHit() {
+    for (const m of this.monsters) {
+      if (m.alive && Cell.isSame(this.player.cell, m.cell)) return true;
+    }
+    return false;
+  }
+
+  allMonstersDead() {
+    for (const m of this.monsters) {
+      if (m.alive) return false;
+    }
+    return true;
+  }
+
+  checkStageClear() {
+    if (!this.portal.active) {
+      if (this.allMonstersDead()) {
+        this.portal.active = true;
+        this.hud.centerText = 'Portal Open!';
+        this.hud.textAlpha = 255;
+      }
+      return;
+    }
+
+    if (this.player.cell.x == 8 && this.player.cell.y == 4) {
+      this.nextStage();
+    }
+  }
+
+  onKeyPressed(inputKey) {
+    if (this.mode != MODE.PLAYING) return;
+    switch (inputKey) {
+      case "w":
+        this.player.cell.x += DIRECTIONS[3].x;
+        this.player.cell.y += DIRECTIONS[3].y;
+        break;
+      case "a":
+        this.player.cell.x += DIRECTIONS[1].x;
+        this.player.cell.y += DIRECTIONS[1].y;
+        break;
+      case "s":
+        this.player.cell.x += DIRECTIONS[2].x;
+        this.player.cell.y += DIRECTIONS[2].y;
+        break;
+      case "d":
+        this.player.cell.x += DIRECTIONS[0].x;
+        this.player.cell.y += DIRECTIONS[0].y;
+        break;
+    }
+  }
+
+  onMousePressed() {
+    if (this.mode != MODE.PLAYING) return;
+
+    for(const m of this.monsters){
+      if(!m.alive) continue;
+      if(abs(m.cell.x - this.player.cell.x) <= CONFIG.attackSize && abs(m.cell.y - this.player.cell.y) <= CONFIG.attackSize){
+        this.score++;
+        m.alive = false;
+        m.cell = {x: -42, y: -42};
+      }
+    }
+    this.player.effectAlpha = 255;
+    if (this.attackSFX.isPlaying()) {
+      this.attackSFX.stop();
+    }
+    this.attackSFX.play();
   }
 }
 
@@ -424,6 +467,7 @@ async function setup() {
     player: await loadImage(ASSET_PATHS.player),
     enemy: await loadImage(ASSET_PATHS.enemy),
     bonus: await loadImage(ASSET_PATHS.bonus),
+    portal: await loadImage(ASSET_PATHS.portal),
     attackSFX: await loadSound(ASSET_PATHS.attackSFX),
   };
   ASSET_PATHS = assets;
@@ -434,10 +478,13 @@ function draw() {
   if (!game) return;
   game.draw();
 }
+
 function mousePressed() {
-  game.state.onMousePressed();
+  if (!game) return;
+  game.onMousePressed();
 }
 
 function keyPressed() {
-  game.state.onKeyPressed(key);
+  if (!game) return;
+  game.onKeyPressed(key);
 }
